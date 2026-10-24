@@ -81,7 +81,7 @@ test_*.py
 test_*.bat
 
 # Streamlit cache
-.streamlit/
+.streamlit/secrets.toml
 
 # OS
 .DS_Store

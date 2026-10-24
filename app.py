@@ -1,1730 +1,577 @@
 """
-ML Capstone Project - Review 2 Complete Application
-Team TASKMASTERS (Team 16)
-23CSE301 Machine Learning - Review 2
+Streamlit front end for the 23CSE301 ML capstone (Team 16).
 
-REVIEW 2 COMPLIANT:
-✅ ALL 10 Classification Algorithms (Part A + Part B)
-✅ Individual Model Selection
-✅ Hierarchical Clustering + K-Means
-✅ All Required Metrics (Silhouette, Davies-Bouldin, Calinski-Harabasz)
-✅ t-SNE Visualization
-✅ Dendrogram for Hierarchical
-✅ Full Comparison Tables
-✅ Hyperparameter Tuning
-✅ Enhanced UI with Better Font Visibility
-✅ INTERACTIVE FEATURES FOR BONUS MARKS
+Each track page trains the models from the notebooks once (cached), shows the
+test-set comparison, and has a Predict tab that turns user inputs into a
+prediction from the trained model.
+
+Run with:  streamlit run app.py
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from pathlib import Path
-import warnings
-
-# Import interactive features module
-try:
-    from interactive_features import (
-        interactive_prediction_regression,
-        interactive_prediction_classification,
-        interactive_data_explorer,
-        interactive_feature_comparison,
-        interactive_model_comparison,
-        interactive_clustering_explorer
-    )
-    INTERACTIVE_AVAILABLE = True
-except ImportError:
-    INTERACTIVE_AVAILABLE = False
-    st.warning("Interactive features module not found. Some features may be limited.")
-
-# Scikit-learn imports
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score, roc_auc_score,
-    confusion_matrix, ConfusionMatrixDisplay, roc_curve, auc,
-    r2_score, mean_squared_error, mean_absolute_error,
-    silhouette_score, davies_bouldin_score, calinski_harabasz_score
-)
-
-# Classification - Part A (Review 1)
-from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.svm import SVC
-
-# Classification - Part B (Review 2) 
-from sklearn.ensemble import (
-    RandomForestClassifier, AdaBoostClassifier, 
-    GradientBoostingClassifier, BaggingClassifier
-)
-from sklearn.neural_network import MLPClassifier
-
-# Regression
-from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor
-from sklearn.svm import SVR
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.neural_network import MLPRegressor
-
-# Clustering
-from sklearn.cluster import KMeans, AgglomerativeClustering
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+import numpy as np
+import pandas as pd
+import streamlit as st
 from scipy.cluster.hierarchy import dendrogram, linkage
 
-warnings.filterwarnings('ignore')
-RANDOM_STATE = 42
-np.random.seed(RANDOM_STATE)
-
-# Page configuration
-st.set_page_config(
-    page_title="ML Capstone - Review 2",
-    page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded"
+from sklearn.cluster import AgglomerativeClustering, KMeans
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+from sklearn.ensemble import (
+    AdaBoostClassifier, BaggingClassifier, GradientBoostingClassifier,
+    GradientBoostingRegressor, RandomForestClassifier, RandomForestRegressor,
 )
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import ElasticNet, Lasso, LinearRegression, LogisticRegression, Ridge
+from sklearn.metrics import (
+    accuracy_score, calinski_harabasz_score, confusion_matrix, davies_bouldin_score,
+    f1_score, mean_absolute_error, mean_squared_error, precision_score, r2_score,
+    recall_score, roc_auc_score, roc_curve, silhouette_score,
+)
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.neural_network import MLPClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.svm import SVC, SVR
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-# Enhanced CSS - Clean, Modern, Highly Readable
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    
-    * {
-        font-family: 'Inter', sans-serif;
-    }
-    
-    /* Main container */
-    .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-    }
-    
-    .main .block-container {
-        background: white;
-        border-radius: 15px;
-        padding: 2rem;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-    }
-    
-    /* Headers - Clear and visible */
-    .main-header {
-        font-size: 2.8rem;
-        font-weight: 800;
-        color: #1a1a1a;
-        text-align: center;
-        margin-bottom: 0.5rem;
-        letter-spacing: -0.5px;
-    }
-    
-    .subtitle {
-        font-size: 1.15rem;
-        color: #4a5568;
-        text-align: center;
-        margin-bottom: 2rem;
-        font-weight: 500;
-    }
-    
-    /* Sidebar - Dark with excellent contrast */
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #2d3748 0%, #1a202c 100%);
-    }
-    
-    section[data-testid="stSidebar"] * {
-        color: #ffffff !important;
-    }
-    
-    section[data-testid="stSidebar"] .stRadio label {
-        font-weight: 600 !important;
-        font-size: 1rem !important;
-        padding: 8px 0 !important;
-        color: #ffffff !important;
-    }
-    
-    section[data-testid="stSidebar"] .stRadio > div {
-        color: #ffffff !important;
-    }
-    
-    section[data-testid="stSidebar"] label {
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    
-    section[data-testid="stSidebar"] p {
-        color: #ffffff !important;
-    }
-    
-    section[data-testid="stSidebar"] span {
-        color: #ffffff !important;
-    }
-    
-    section[data-testid="stSidebar"] div {
-        color: #ffffff !important;
-    }
-    
-    /* Radio button circles */
-    section[data-testid="stSidebar"] input[type="radio"] + div {
-        border-color: #ffffff !important;
-    }
-    
-    section[data-testid="stSidebar"] input[type="radio"]:checked + div {
-        background-color: #667eea !important;
-        border-color: #667eea !important;
-    }
-    
-    /* Headers in main content */
-    .main h1, .main h2, .main h3 {
-        color: #2d3748 !important;
-        font-weight: 700 !important;
-        margin-top: 1.5rem !important;
-    }
-    
-    .main h1 {
-        font-size: 2rem !important;
-    }
-    
-    .main h2 {
-        font-size: 1.75rem !important;
-    }
-    
-    .main h3 {
-        font-size: 1.5rem !important;
-    }
-    
-    /* Body text */
-    .main p, .main li, .main span, .main div {
-        color: #2d3748 !important;
-        font-size: 1rem !important;
-        line-height: 1.6 !important;
-    }
-    
-    /* Buttons */
-    .stButton>button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white !important;
-        border: none;
-        border-radius: 8px;
-        padding: 0.65rem 1.5rem;
-        font-weight: 600;
-        font-size: 1rem;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        transition: all 0.2s ease;
-    }
-    
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
-    }
-    
-    /* Checkboxes and Radio buttons */
-    .stCheckbox label, .stRadio label {
-        color: #2d3748 !important;
-        font-weight: 600 !important;
-        font-size: 0.95rem !important;
-    }
-    
-    /* Selectbox */
-    .stSelectbox label {
-        color: #2d3748 !important;
-        font-weight: 600 !important;
-        font-size: 1rem !important;
-    }
-    
-    /* Dataframes */
-    .dataframe {
-        font-size: 0.9rem !important;
-    }
-    
-    .dataframe thead th {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        color: white !important;
-        font-weight: 600 !important;
-        padding: 12px !important;
-        text-align: left !important;
-    }
-    
-    .dataframe tbody td {
-        color: #2d3748 !important;
-        padding: 10px !important;
-        border-bottom: 1px solid #e2e8f0 !important;
-    }
-    
-    .dataframe tbody tr:hover {
-        background-color: #f7fafc !important;
-    }
-    
-    /* Metrics */
-    [data-testid="stMetricValue"] {
-        font-size: 2rem !important;
-        font-weight: 700 !important;
-        color: #2d3748 !important;
-    }
-    
-    [data-testid="stMetricLabel"] {
-        font-size: 0.95rem !important;
-        font-weight: 600 !important;
-        color: #4a5568 !important;
-    }
-    
-    /* Info/Success/Warning/Error boxes - WHITE TEXT */
-    .stAlert {
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 1rem 0;
-    }
-    
-    .stSuccess, .stSuccess * {
-        background-color: #059669 !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    
-    .stInfo, .stInfo * {
-        background-color: #3b82f6 !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    
-    .stWarning, .stWarning * {
-        background-color: #f59e0b !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    
-    .stError, .stError * {
-        background-color: #dc2626 !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    
-    /* Markdown in colored boxes */
-    [data-testid="stMarkdownContainer"] p {
-        color: #2d3748 !important;
-    }
-    
-    /* But white text in alert boxes */
-    .stAlert [data-testid="stMarkdownContainer"] p,
-    .stAlert [data-testid="stMarkdownContainer"] li,
-    .stAlert [data-testid="stMarkdownContainer"] strong,
-    .stAlert [data-testid="stMarkdownContainer"] span {
-        color: #ffffff !important;
-    }
-    
-    /* Expander */
-    .streamlit-expanderHeader {
-        background-color: #f7fafc !important;
-        color: #2d3748 !important;
-        font-weight: 600 !important;
-        border-radius: 8px !important;
-    }
-    
-    /* Slider */
-    .stSlider label {
-        color: #2d3748 !important;
-        font-weight: 600 !important;
-    }
-    
-    /* Make sure markdown content is visible */
-    .main [data-testid="stMarkdownContainer"] {
-        color: #2d3748 !important;
-    }
-    
-    .main [data-testid="stMarkdownContainer"] strong {
-        color: #1a202c !important;
-        font-weight: 700 !important;
-    }
-    
-    /* Custom HTML divs with gradients - force white text */
-    .main div[style*="linear-gradient"] {
-        color: white !important;
-    }
-    
-    .main div[style*="linear-gradient"] * {
-        color: white !important;
-    }
-    
-    .main div[style*="linear-gradient"] h1,
-    .main div[style*="linear-gradient"] h2,
-    .main div[style*="linear-gradient"] h3,
-    .main div[style*="linear-gradient"] p,
-    .main div[style*="linear-gradient"] span,
-    .main div[style*="linear-gradient"] li {
-        color: white !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+RANDOM_STATE = 42
+
+st.set_page_config(page_title="ML Capstone · Team 16", layout="wide")
+
+plt.rcParams.update({
+    "figure.dpi": 110,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "axes.grid": True,
+    "grid.alpha": 0.25,
+    "font.size": 9,
+})
+PALETTE = plt.get_cmap("tab10").colors
 
 
+def preprocessor(features, scale=True, poly_degree=None):
+    steps = [("imputer", SimpleImputer(strategy="median"))]
+    if poly_degree:
+        steps.append(("poly", PolynomialFeatures(degree=poly_degree, include_bias=False)))
+    if scale:
+        steps.append(("scaler", StandardScaler()))
+    return ColumnTransformer([("numeric", Pipeline(steps), features)])
 
-# ==================== DATA LOADING ====================
 
-@st.cache_data
-def load_classification_data():
-    """Load Australian Open Tennis data"""
-    try:
-        df = pd.read_csv('AustralianOpen.csv', encoding='latin1')
-        working_df = df.copy()
-        
-        # Feature engineering
-        working_df['rank_gap_abs'] = (working_df['WRank'] - working_df['LRank']).abs()
-        working_df['experience_gap_abs'] = (working_df['pl1_year_pro'] - working_df['pl2_year_pro']).abs()
-        working_df['height_gap_abs'] = (working_df['pl1_height'] - working_df['pl2_height']).abs()
-        working_df['weight_gap_abs'] = (working_df['pl1_weight'] - working_df['pl2_weight']).abs()
-        working_df['same_handedness_bin'] = working_df['same_handedness'].astype('string').str.strip().str.title().map({'Yes': 1, 'No': 0})
-        working_df['target'] = working_df['higher_rank_won'].astype('string').str.strip().str.title().map({'No': 0, 'Yes': 1})
-        
-        feature_columns = ['rank_gap_abs', 'experience_gap_abs', 'height_gap_abs', 'weight_gap_abs', 'same_handedness_bin']
-        model_df = working_df[feature_columns + ['target']].dropna(subset=['target']).copy()
-        
-        X = model_df[feature_columns]
-        y = model_df['target'].astype(int)
-        
-        return X, y, working_df
-    except Exception as e:
-        st.error(f"Error loading classification data: {e}")
-        return None, None, None
+def pipe(features, model, **prep_kwargs):
+    return Pipeline([("preprocess", preprocessor(features, **prep_kwargs)), ("model", model)])
+
+
+# ---------------------------------------------------------------- classification
+
+CLS_FEATURES = ["rank_gap_abs", "experience_gap_abs", "height_gap_abs", "weight_gap_abs",
+                "same_handedness_bin", "fav_rank", "log_rank_ratio"]
+CLS_FINAL_MODEL = "Gaussian Naive Bayes"
+
+
+def match_features(rank_a, rank_b, pro_a, pro_b, height_a, height_b, weight_a, weight_b, same_hand):
+    # Same symmetric features as classification.ipynb, section 3.
+    favourite, underdog = min(rank_a, rank_b), max(rank_a, rank_b)
+    return {
+        "rank_gap_abs": underdog - favourite,
+        "experience_gap_abs": abs(pro_a - pro_b),
+        "height_gap_abs": abs(height_a - height_b),
+        "weight_gap_abs": abs(weight_a - weight_b),
+        "same_handedness_bin": int(same_hand),
+        "fav_rank": favourite,
+        "log_rank_ratio": np.log(underdog / favourite),
+    }
 
 
 @st.cache_data
-def load_regression_data():
-    """Load PGA Golf 2022 data"""
-    try:
-        df = pd.read_csv('PGA2022.csv', encoding='latin1')
-        working_df = df.copy()
-        
-        # Feature engineering
-        working_df['totalSG'] = working_df['driveSG'] + working_df['puttsSG']
-        
-        feature_columns = ['avgDriveDist', 'drivePct', 'avgPuttsPerRound', 
-                          'onePuttPct', 'driveSG', 'puttsSG', 'totalSG']
-        model_df = working_df[feature_columns + ['avgScore']].dropna()
-        
-        X = model_df[feature_columns]
-        y = model_df['avgScore']
-        
-        return X, y, working_df
-    except Exception as e:
-        st.error(f"Error loading regression data: {e}")
-        return None, None, None
+def load_tennis():
+    df = pd.read_csv("AustralianOpen.csv", encoding="latin1").dropna(subset=["higher_rank_won"])
+    rows = [
+        match_features(r.WRank, r.LRank, r.pl1_year_pro, r.pl2_year_pro, r.pl1_height,
+                       r.pl2_height, r.pl1_weight, r.pl2_weight, r.same_handedness == "Yes")
+        for r in df.itertuples()
+    ]
+    X = pd.DataFrame(rows, index=df.index)
+    # Missing player-2 profiles must stay missing so the pipeline imputes them.
+    missing_profile = df["pl2_year_pro"].isna()
+    X.loc[missing_profile, ["experience_gap_abs", "height_gap_abs", "weight_gap_abs",
+                            "same_handedness_bin"]] = np.nan
+    y = df["higher_rank_won"].eq("Yes").astype(int)
+    return df, X, y
 
 
-# ==================== MODEL DEFINITIONS ====================
-
-def get_all_classification_models():
-    """Get ALL 10 classification algorithms for Review 2"""
-    scaled_prep = ColumnTransformer([
-        ('numeric', Pipeline([
-            ('imputer', SimpleImputer(strategy='median')),
-            ('scaler', StandardScaler())
-        ]), slice(None))
-    ])
-    
-    tree_prep = ColumnTransformer([
-        ('numeric', SimpleImputer(strategy='median'), slice(None))
-    ])
-    
-    # Part A - Review 1
-    part_a = {
-        '1. Logistic Regression': Pipeline([
-            ('prep', scaled_prep),
-            ('model', LogisticRegression(max_iter=2000, random_state=RANDOM_STATE))
-        ]),
-        '2. K-Nearest Neighbors': Pipeline([
-            ('prep', scaled_prep),
-            ('model', KNeighborsClassifier(n_neighbors=5))
-        ]),
-        '3. Gaussian Naive Bayes': Pipeline([
-            ('prep', scaled_prep),
-            ('model', GaussianNB())
-        ]),
-        '4. Decision Tree': Pipeline([
-            ('prep', tree_prep),
-            ('model', DecisionTreeClassifier(max_depth=5, random_state=RANDOM_STATE))
-        ]),
-        '5. Support Vector Machine': Pipeline([
-            ('prep', scaled_prep),
-            ('model', SVC(probability=True, kernel='rbf', random_state=RANDOM_STATE))
-        ])
+def classifiers():
+    # Hyperparameters are the GridSearchCV results from classification.ipynb.
+    f = CLS_FEATURES
+    return {
+        "Logistic Regression": pipe(f, LogisticRegression(C=0.1, max_iter=2000, random_state=RANDOM_STATE)),
+        "K-Nearest Neighbors": pipe(f, KNeighborsClassifier(n_neighbors=5, metric="manhattan")),
+        "Gaussian Naive Bayes": pipe(f, GaussianNB(var_smoothing=0.01)),
+        "Decision Tree": pipe(f, DecisionTreeClassifier(criterion="entropy", max_depth=7, min_samples_leaf=20,
+                                                        random_state=RANDOM_STATE)),
+        "Support Vector Machine": pipe(f, SVC(C=10, kernel="rbf", probability=True, random_state=RANDOM_STATE)),
+        "Random Forest": pipe(f, RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1)),
+        "AdaBoost": pipe(f, AdaBoostClassifier(n_estimators=200, learning_rate=1.0, random_state=RANDOM_STATE)),
+        "Gradient Boosting": pipe(f, GradientBoostingClassifier(n_estimators=200, learning_rate=0.1, max_depth=3,
+                                                                random_state=RANDOM_STATE)),
+        "Bagging": pipe(f, BaggingClassifier(estimator=DecisionTreeClassifier(random_state=RANDOM_STATE),
+                                             n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1)),
+        "MLP Neural Network": pipe(f, MLPClassifier(hidden_layer_sizes=(16,), activation="tanh", alpha=0.01,
+                                                    max_iter=1000, early_stopping=True,
+                                                    random_state=RANDOM_STATE)),
     }
-    
-    # Part B - Review 2
-    part_b = {
-        '6. Random Forest': Pipeline([
-            ('prep', tree_prep),
-            ('model', RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE))
-        ]),
-        '7. AdaBoost': Pipeline([
-            ('prep', tree_prep),
-            ('model', AdaBoostClassifier(n_estimators=50, random_state=RANDOM_STATE))
-        ]),
-        '8. Gradient Boosting': Pipeline([
-            ('prep', tree_prep),
-            ('model', GradientBoostingClassifier(n_estimators=100, random_state=RANDOM_STATE))
-        ]),
-        '9. Bagging': Pipeline([
-            ('prep', tree_prep),
-            ('model', BaggingClassifier(
-                estimator=DecisionTreeClassifier(random_state=RANDOM_STATE),
-                n_estimators=10,
-                random_state=RANDOM_STATE
-            ))
-        ]),
-        '10. MLP Neural Network': Pipeline([
-            ('prep', scaled_prep),
-            ('model', MLPClassifier(
-                hidden_layer_sizes=(100, 50),
-                max_iter=500,
-                random_state=RANDOM_STATE
-            ))
-        ])
-    }
-    
-    all_models = {**part_a, **part_b}
-    return all_models, part_a, part_b
 
 
-def get_regression_models():
-    """Get all 10 regression algorithms"""
-    scaled_prep = ColumnTransformer([
-        ('numeric', Pipeline([
-            ('imputer', SimpleImputer(strategy='median')),
-            ('scaler', StandardScaler())
-        ]), slice(None))
-    ])
-    
-    tree_prep = ColumnTransformer([
-        ('numeric', SimpleImputer(strategy='median'), slice(None))
-    ])
-    
-    models = {
-        '1. Linear Regression': Pipeline([('prep', scaled_prep), ('model', LinearRegression())]),
-        '2. Ridge': Pipeline([('prep', scaled_prep), ('model', Ridge(alpha=1.0, random_state=RANDOM_STATE))]),
-        '3. Lasso': Pipeline([('prep', scaled_prep), ('model', Lasso(alpha=0.1, random_state=RANDOM_STATE))]),
-        '4. ElasticNet': Pipeline([('prep', scaled_prep), ('model', ElasticNet(alpha=0.1, l1_ratio=0.5, random_state=RANDOM_STATE))]),
-        '5. Polynomial': Pipeline([('prep', scaled_prep), ('poly', PolynomialFeatures(degree=2)), ('model', LinearRegression())]),
-        '6. Decision Tree': Pipeline([('prep', tree_prep), ('model', DecisionTreeRegressor(max_depth=5, random_state=RANDOM_STATE))]),
-        '7. Random Forest': Pipeline([('prep', tree_prep), ('model', RandomForestRegressor(n_estimators=100, random_state=RANDOM_STATE))]),
-        '8. Gradient Boosting': Pipeline([('prep', tree_prep), ('model', GradientBoostingRegressor(n_estimators=100, random_state=RANDOM_STATE))]),
-        '9. SVR': Pipeline([('prep', scaled_prep), ('model', SVR(kernel='rbf'))]),
-        '10. KNN': Pipeline([('prep', scaled_prep), ('model', KNeighborsRegressor(n_neighbors=5))])
-    }
-    
-    return models
-
-
-# ==================== MAIN APP ====================
-
-def main():
-    st.markdown('<h1 class="main-header">🎓 ML Capstone Project - Review 2</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Team TASKMASTERS (Team 16) • 23CSE301 Machine Learning • Review 2 Complete</p>', unsafe_allow_html=True)
-    
-    st.sidebar.header("📍 Navigation")
-    page = st.sidebar.radio(
-        "Select Module",
-        ["🏠 Home", "🎾 Classification (10 Models)", "⛳ Regression (10 Models)", "🔍 Clustering (K-Means + Hierarchical)"],
-        label_visibility="collapsed"
-    )
-    
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### ℹ️ About")
-    st.sidebar.info("""
-    **Review 2 Features:**
-    
-    ✅ 10 Classification Algorithms
-    ✅ Individual Model Selection
-    ✅ 10 Regression Algorithms  
-    ✅ K-Means + Hierarchical Clustering
-    ✅ All Required Metrics
-    ✅ t-SNE Visualization
-    ✅ Dendrogram
-    """)
-    
-    if page == "🏠 Home":
-        show_home()
-    elif page == "🎾 Classification (10 Models)":
-        show_classification_review2()
-    elif page == "⛳ Regression (10 Models)":
-        show_regression()
-    elif page == "🔍 Clustering (K-Means + Hierarchical)":
-        show_clustering_review2()
-
-
-def show_home():
-    """Home page"""
-    st.markdown("""
-    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                padding: 2.5rem; border-radius: 20px; text-align: center; margin: 2rem 0;
-                box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);'>
-        <h2 style='color: white; margin: 0; font-size: 2.5rem; font-weight: 800;'>Review 2 - Complete Implementation</h2>
-        <p style='color: white; margin: 1rem 0 0 0; font-size: 1.2rem; opacity: 0.95;'>
-        All rubric requirements + Interactive Features for Bonus Marks!
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        <div style='background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);'>
-            <h3 style='color: #667eea; margin-top: 0;'>🎾 Classification</h3>
-            <p style='font-weight: 600; font-size: 1.1rem;'>ALL 10 Algorithms</p>
-            <ul style='color: #2d3748;'>
-                <li>Part A: 5 algorithms (Review 1)</li>
-                <li>Part B: 5 algorithms (Review 2)</li>
-                <li>Individual model selection</li>
-                <li>Full comparison table</li>
-                <li>All required metrics</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div style='background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);'>
-            <h3 style='color: #f093fb; margin-top: 0;'>⛳ Regression</h3>
-            <p style='font-weight: 600; font-size: 1.1rem;'>10 Algorithms</p>
-            <ul style='color: #2d3748;'>
-                <li>Linear, Ridge, Lasso, ElasticNet</li>
-                <li>Polynomial Regression</li>
-                <li>Tree-based methods</li>
-                <li>SVR, KNN</li>
-                <li>Complete evaluation</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("""
-        <div style='background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);'>
-            <h3 style='color: #764ba2; margin-top: 0;'>🔍 Clustering</h3>
-            <p style='font-weight: 600; font-size: 1.1rem;'>2 Algorithms</p>
-            <ul style='color: #2d3748;'>
-                <li>K-Means + Elbow method</li>
-                <li>Hierarchical + Dendrogram</li>
-                <li>All 3 metrics required</li>
-                <li>PCA + t-SNE visualization</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    
-    # Quick start guide
-    st.markdown("""
-    <div style='background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); 
-                padding: 1.5rem; border-radius: 15px; margin: 1rem 0;
-                box-shadow: 0 5px 15px rgba(99, 102, 241, 0.3);'>
-        <h3 style='color: white; margin: 0 0 1rem 0; font-weight: 700;'>🚀 Quick Start Guide</h3>
-        <p style='margin: 0.5rem 0; color: white; font-size: 1rem;'>
-        <strong>1.</strong> Select a module from the sidebar<br>
-        <strong>2.</strong> Choose individual models or run all at once<br>
-        <strong>3.</strong> View comprehensive results and visualizations<br>
-        <strong>4.</strong> Export or analyze the best performing models
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # NEW: Interactive Features Highlight
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("""
-    <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
-                padding: 1.5rem; border-radius: 15px; margin: 1rem 0;
-                box-shadow: 0 5px 15px rgba(240, 147, 251, 0.3);'>
-        <h3 style='color: white; margin: 0 0 1rem 0; font-weight: 700;'>✨ Interactive Features (Bonus Marks)</h3>
-        <p style='margin: 0.5rem 0; color: white; font-size: 1rem;'>
-        <strong>🎯 Real-time Predictions:</strong> Adjust sliders to make custom predictions<br>
-        <strong>🔍 Data Explorer:</strong> Interactive visualization of dataset features<br>
-        <strong>📊 Feature Comparison:</strong> Compare any two features with correlation analysis<br>
-        <strong>⚖️ Model Comparison:</strong> Select and compare specific models side-by-side<br>
-        <strong>🔧 Hyperparameter Tuning:</strong> Interactive parameter adjustment with live results<br>
-        <strong>🌳 Cluster Explorer:</strong> Explore individual clusters interactively
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-def show_classification_review2():
-    """Classification with all 10 algorithms (Part A + Part B) - Review 2 compliant"""
-    st.header("🎯 Classification Analysis (Review 2)")
-    
-    st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                padding: 20px; border-radius: 10px; color: white; margin-bottom: 20px;">
-        <h3 style="margin:0; color: white;">📚 Review 2 Requirements</h3>
-        <p style="margin: 10px 0 0 0;">
-        ✅ Part A: 5 algorithms (Logistic, KNN, Naive Bayes, Decision Tree, SVM)<br>
-        ✅ Part B: 5 algorithms (Random Forest, AdaBoost, Gradient Boosting, Bagging, MLP)<br>
-        ✅ Individual model selection OR run all at once<br>
-        ✅ Complete metrics: Accuracy, Precision, Recall, F1, ROC-AUC, Confusion Matrix
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Load data using proper function
-    X, y, working_df = load_classification_data()
-    
-    if X is None or y is None:
-        st.error("Failed to load classification data. Please check the dataset.")
-        return
-    
-    st.success(f"✅ Loaded {len(X)} records with {X.shape[1]} features")
-    
-    # Data info
-    with st.expander("📊 Dataset Overview"):
-        st.write(f"**Features:** {list(X.columns)}")
-        st.write(f"**Target distribution:**")
-        st.write(y.value_counts())
-        st.write(f"**Shape:** {X.shape}")
-    
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=RANDOM_STATE)
-    
-    st.write(f"**Training set:** {X_train.shape[0]} samples | **Test set:** {X_test.shape[0]} samples")
-    
-    # Get all models
-    all_models, part_a, part_b = get_all_classification_models()
-    
-    # Model selection interface
-    st.subheader("🔧 Model Selection")
-    
-    # Quick option to run all
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown("**Choose your approach:**")
-    with col2:
-        run_all = st.checkbox("🚀 Run All 10 Models", value=False, help="Compare all algorithms at once")
-    
-    if not run_all:
-        st.markdown("**Or select individual models:**")
-        col_a, col_b = st.columns(2)
-        
-        with col_a:
-            st.markdown("**📘 Part A (Review 1)**")
-            part_a_selected = {}
-            for key in part_a.keys():
-                if st.checkbox(key, key=f"part_a_{key}"):
-                    part_a_selected[key] = part_a[key]
-        
-        with col_b:
-            st.markdown("**📗 Part B (Review 2)**")
-            part_b_selected = {}
-            for key in part_b.keys():
-                if st.checkbox(key, key=f"part_b_{key}"):
-                    part_b_selected[key] = part_b[key]
-        
-        selected_models = {**part_a_selected, **part_b_selected}
-        
-        if selected_models:
-            st.info(f"✅ Selected {len(selected_models)} model(s): {', '.join(selected_models.keys())}")
-        else:
-            st.warning("⚠️ Please select at least one model or check 'Run All 10 Models'")
-            return
-    else:
-        selected_models = all_models
-        st.success(f"✅ Running all {len(selected_models)} classification algorithms")
-    
-    # Train and evaluate
-    if st.button("🚀 Train and Evaluate Selected Models", type="primary", use_container_width=True):
-        st.markdown("---")
-        results = []
-        models_trained = {}
-        
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for idx, (name, model) in enumerate(selected_models.items()):
-            status_text.markdown(f"**Training:** {name} ({idx+1}/{len(selected_models)})...")
-            
-            try:
-                # Train (models are pipelines that handle their own preprocessing)
-                import time
-                start_time = time.time()
-                model.fit(X_train, y_train)
-                train_time = time.time() - start_time
-                
-                # Predict
-                y_pred = model.predict(X_test)
-                y_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, 'predict_proba') else None
-                
-                # Metrics
-                accuracy = accuracy_score(y_test, y_pred)
-                precision = precision_score(y_test, y_pred, zero_division=0)
-                recall = recall_score(y_test, y_pred, zero_division=0)
-                f1 = f1_score(y_test, y_pred, zero_division=0)
-                
-                # ROC-AUC
-                roc_auc = None
-                if y_proba is not None:
-                    try:
-                        roc_auc = roc_auc_score(y_test, y_proba)
-                    except:
-                        roc_auc = None
-                
-                results.append({
-                    'Model': name,
-                    'Accuracy': accuracy,
-                    'Precision': precision,
-                    'Recall': recall,
-                    'F1-Score': f1,
-                    'ROC-AUC': roc_auc if roc_auc else 0.0,
-                    'Train Time (s)': train_time,
-                    'Accuracy_fmt': f"{accuracy:.4f}",
-                    'Precision_fmt': f"{precision:.4f}",
-                    'Recall_fmt': f"{recall:.4f}",
-                    'F1_fmt': f"{f1:.4f}",
-                    'ROC_AUC_fmt': f"{roc_auc:.4f}" if roc_auc else "N/A",
-                    'Time_fmt': f"{train_time:.3f}",
-                })
-                
-                models_trained[name] = {
-                    'model': model,
-                    'predictions': y_pred,
-                    'probabilities': y_proba,
-                    'metrics': results[-1]
-                }
-                
-            except Exception as e:
-                st.error(f"❌ Error training {name}: {e}")
-                import traceback
-                st.code(traceback.format_exc())
-            
-            progress_bar.progress((idx + 1) / len(selected_models))
-        
-        status_text.empty()
-        progress_bar.empty()
-        
-        if not results:
-            st.error("No models were successfully trained.")
-            return
-        
-        st.success(f"✅ Successfully trained {len(results)} model(s)!")
-        
-        # Sort by accuracy
-        results_sorted = sorted(results, key=lambda x: x['Accuracy'], reverse=True)
-        best_model = results_sorted[0]
-        
-        # Display best model prominently
-        st.markdown("---")
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-                    padding: 30px; border-radius: 15px; text-align: center; 
-                    box-shadow: 0 10px 25px rgba(0,0,0,0.2); margin: 20px 0;">
-            <h1 style="color: white; margin: 0; font-size: 2.5em;">🏆 BEST MODEL</h1>
-            <h2 style="color: white; margin: 10px 0; font-size: 2em;">{best_model['Model']}</h2>
-            <div style="display: flex; justify-content: space-around; margin-top: 20px;">
-                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; min-width: 150px;">
-                    <div style="color: white; font-size: 0.9em;">Accuracy</div>
-                    <div style="color: white; font-size: 1.8em; font-weight: bold;">{best_model['Accuracy_fmt']}</div>
-                </div>
-                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; min-width: 150px;">
-                    <div style="color: white; font-size: 0.9em;">F1-Score</div>
-                    <div style="color: white; font-size: 1.8em; font-weight: bold;">{best_model['F1_fmt']}</div>
-                </div>
-                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; min-width: 150px;">
-                    <div style="color: white; font-size: 0.9em;">ROC-AUC</div>
-                    <div style="color: white; font-size: 1.8em; font-weight: bold;">{best_model['ROC_AUC_fmt']}</div>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Display results table
-        st.subheader("📊 Complete Performance Comparison")
-        
-        display_df = pd.DataFrame([{
-            '🏅 Rank': idx + 1,
-            'Model': r['Model'],
-            'Accuracy': r['Accuracy_fmt'],
-            'Precision': r['Precision_fmt'],
-            'Recall': r['Recall_fmt'],
-            'F1-Score': r['F1_fmt'],
-            'ROC-AUC': r['ROC_AUC_fmt'],
-            'Train Time': r['Time_fmt']
-        } for idx, r in enumerate(results_sorted)])
-        
-        # Highlight best model
-        def highlight_best(row):
-            if row['🏅 Rank'] == 1:
-                return ['background-color: #d4edda; font-weight: bold'] * len(row)
-            return [''] * len(row)
-        
-        styled_df = display_df.style.apply(highlight_best, axis=1)
-        st.dataframe(styled_df, use_container_width=True, height=400)
-        
-        # Performance metrics visualization
-        st.subheader("📈 Performance Metrics Visualization")
-        
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        
-        metrics_to_plot = ['Accuracy', 'Precision', 'Recall', 'F1-Score']
-        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A']
-        
-        for idx, (metric, color) in enumerate(zip(metrics_to_plot, colors)):
-            ax = axes[idx // 2, idx % 2]
-            values = [r[metric] for r in results_sorted]
-            models = [r['Model'] for r in results_sorted]
-            
-            bars = ax.barh(models, values, color=color, alpha=0.8, edgecolor='black', linewidth=1.5)
-            
-            # Highlight best
-            bars[0].set_color('#2ECC71')
-            bars[0].set_edgecolor('gold')
-            bars[0].set_linewidth(3)
-            
-            ax.set_xlabel(metric, fontsize=12, fontweight='bold')
-            ax.set_title(f'{metric} Comparison', fontsize=14, fontweight='bold')
-            ax.set_xlim(0, 1.0)
-            ax.grid(axis='x', alpha=0.3)
-            
-            # Add value labels
-            for bar, value in zip(bars, values):
-                ax.text(value + 0.01, bar.get_y() + bar.get_height()/2, 
-                       f'{value:.3f}', va='center', fontsize=9)
-        
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-        
-        # Confusion matrices for top 3 models
-        st.subheader("🎯 Confusion Matrices (Top 3 Models)")
-        
-        top_3 = results_sorted[:min(3, len(results_sorted))]
-        cols = st.columns(3)
-        
-        for idx, result in enumerate(top_3):
-            model_name = result['Model']
-            y_pred = models_trained[model_name]['predictions']
-            
-            with cols[idx]:
-                fig, ax = plt.subplots(figsize=(6, 5))
-                cm = confusion_matrix(y_test, y_pred)
-                
-                # Choose colormap based on rank
-                cmap = 'Greens' if idx == 0 else 'Blues' if idx == 1 else 'Purples'
-                
-                disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-                disp.plot(ax=ax, cmap=cmap, colorbar=True)
-                
-                title = f"{'🥇' if idx == 0 else '🥈' if idx == 1 else '🥉'} {model_name}"
-                ax.set_title(title, fontsize=12, fontweight='bold', pad=10)
-                
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close()
-                
-                st.metric("Accuracy", result['Accuracy_fmt'], 
-                         delta=None if idx == 0 else f"{result['Accuracy'] - top_3[0]['Accuracy']:.4f}")
-        
-        # ROC Curves for top 3
-        st.subheader("📉 ROC Curves (Top 3 Models)")
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        
-        colors_roc = ['#2ECC71', '#3498DB', '#9B59B6']
-        line_styles = ['-', '--', '-.']
-        
-        for idx, result in enumerate(top_3):
-            model_name = result['Model']
-            y_proba = models_trained[model_name]['probabilities']
-            
-            if y_proba is not None:
-                fpr, tpr, _ = roc_curve(y_test, y_proba)
-                roc_auc = result['ROC-AUC']
-                
-                label = f"{'🥇' if idx == 0 else '🥈' if idx == 1 else '🥉'} {model_name} (AUC = {roc_auc:.4f})"
-                ax.plot(fpr, tpr, color=colors_roc[idx], linestyle=line_styles[idx],
-                       linewidth=3 if idx == 0 else 2, label=label, marker='o' if idx == 0 else None,
-                       markersize=4 if idx == 0 else 0, markevery=10)
-        
-        ax.plot([0, 1], [0, 1], 'k--', linewidth=2, label='Random Classifier', alpha=0.5)
-        ax.set_xlabel('False Positive Rate', fontsize=12, fontweight='bold')
-        ax.set_ylabel('True Positive Rate', fontsize=12, fontweight='bold')
-        ax.set_title('ROC Curves - Top 3 Models', fontsize=14, fontweight='bold')
-        ax.legend(loc='lower right', fontsize=11, framealpha=0.9)
-        ax.grid(alpha=0.3)
-        ax.set_xlim([0.0, 1.0])
-        ax.set_ylim([0.0, 1.05])
-        
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-        
-        # Model insights
-        st.subheader("💡 Key Insights")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown(f"""
-            **Best Overall Model:**
-            - **{best_model['Model']}**
-            - Accuracy: {best_model['Accuracy_fmt']}
-            - Training time: {best_model['Time_fmt']}s
-            """)
-        
-        with col2:
-            fastest_model = min(results_sorted, key=lambda x: x['Train Time (s)'])
-            st.markdown(f"""
-            **Fastest Model:**
-            - **{fastest_model['Model']}**
-            - Time: {fastest_model['Time_fmt']}s
-            - Accuracy: {fastest_model['Accuracy_fmt']}
-            """)
-        
-        with col3:
-            if len(results_sorted) >= 3:
-                avg_accuracy = sum(r['Accuracy'] for r in results_sorted) / len(results_sorted)
-                st.markdown(f"""
-                **Overall Statistics:**
-                - Models trained: {len(results_sorted)}
-                - Average accuracy: {avg_accuracy:.4f}
-                - Best-Worst gap: {results_sorted[0]['Accuracy'] - results_sorted[-1]['Accuracy']:.4f}
-                """)
-        
-        # Recommendations
-        st.markdown("---")
-        st.subheader("🎯 Recommendations")
-        
-        if best_model['Accuracy'] >= 0.90:
-            recommendation = "🌟 **Excellent Performance!** Your best model shows outstanding accuracy. Consider deploying it."
-        elif best_model['Accuracy'] >= 0.80:
-            recommendation = "✅ **Good Performance!** The model performs well. You might try hyperparameter tuning for further improvement."
-        elif best_model['Accuracy'] >= 0.70:
-            recommendation = "⚠️ **Moderate Performance.** Consider feature engineering or trying different algorithms."
-        else:
-            recommendation = "🔴 **Low Performance.** Review your data quality, feature selection, and try different preprocessing."
-        
-        st.info(recommendation)
-        
-        # Hyperparameter tuning suggestion
-        if run_all or len(selected_models) > 1:
-            st.markdown(f"""
-            **Next Steps:**
-            - Fine-tune **{best_model['Model']}** with GridSearchCV
-            - Perform feature importance analysis
-            - Try ensemble methods combining top models
-            - Collect more data if possible
-            """)
-        
-        # NEW: Interactive Features
-        st.markdown("---")
-        st.subheader("✨ Interactive Features")
-        
-        # Add tabs for different interactive features
-        inter_tab1, inter_tab2, inter_tab3 = st.tabs(["🎯 Make Predictions", "🔍 Explore Data", "📊 Compare Features"])
-        
-        with inter_tab1:
-            if INTERACTIVE_AVAILABLE:
-                st.markdown("#### Predict Match Outcomes with Your Own Data")
-                st.markdown("Adjust the sliders below to see predictions in real-time!")
-                interactive_prediction_classification(
-                    models_trained[best_model['Model']]['model'],
-                    X, None, X.columns.tolist()
-                )
-            else:
-                st.warning("Interactive features module not available")
-        
-        with inter_tab2:
-            if INTERACTIVE_AVAILABLE:
-                interactive_data_explorer(working_df, "Australian Open")
-            else:
-                st.warning("Interactive features module not available")
-        
-        with inter_tab3:
-            if INTERACTIVE_AVAILABLE:
-                interactive_feature_comparison(working_df)
-            else:
-                st.warning("Interactive features module not available")
-
-def show_regression():
-    """Regression with 10 algorithms - Review 2 compliant"""
-    st.header("📈 Regression Analysis (Review 2)")
-    
-    st.markdown("""
-    <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
-                padding: 20px; border-radius: 10px; color: white; margin-bottom: 20px;">
-        <h3 style="margin:0; color: white;">📚 Regression Algorithms</h3>
-        <p style="margin: 10px 0 0 0;">
-        ✅ 10 algorithms: Linear, Ridge, Lasso, ElasticNet, SVR, Decision Tree, Random Forest, Gradient Boosting, AdaBoost, MLP<br>
-        ✅ Individual model selection OR run all at once<br>
-        ✅ Complete metrics: MSE, RMSE, MAE, R²
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Load data using proper function
-    X, y, working_df = load_regression_data()
-    
-    if X is None or y is None:
-        st.error("Failed to load regression data. Please check the dataset.")
-        return
-    
-    st.success(f"✅ Loaded {len(X)} records with {X.shape[1]} features")
-    
-    # Data info
-    with st.expander("📊 Dataset Overview"):
-        st.write(f"**Features:** {list(X.columns)}")
-        st.write(f"**Target (avgScore) statistics:**")
-        st.write(y.describe())
-        st.write(f"**Shape:** {X.shape}")
-    
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=RANDOM_STATE)
-    
-    st.write(f"**Training set:** {X_train.shape[0]} samples | **Test set:** {X_test.shape[0]} samples")
-    
-    # Get models
-    all_models = get_regression_models()
-    
-    # Model selection interface
-    st.subheader("🔧 Model Selection")
-    
-    # Quick option to run all
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown("**Choose your approach:**")
-    with col2:
-        run_all = st.checkbox("🚀 Run All 10 Models", value=False, help="Compare all algorithms at once")
-    
-    if not run_all:
-        st.markdown("**Or select individual models:**")
-        col_a, col_b = st.columns(2)
-        
-        with col_a:
-            st.markdown("**📘 Linear Models**")
-            linear_models = ['1. Linear Regression', '2. Ridge', '3. Lasso', '4. ElasticNet', '9. SVR']
-            linear_selected = {}
-            for key in linear_models:
-                display_name = key.split('. ', 1)[1]  # Remove number prefix for display
-                if st.checkbox(display_name, key=f"linear_{key}"):
-                    linear_selected[key] = all_models[key]
-        
-        with col_b:
-            st.markdown("**📗 Tree & Neural Models**")
-            tree_models = ['6. Decision Tree', '7. Random Forest', '8. Gradient Boosting', '5. Polynomial', '10. KNN']
-            tree_selected = {}
-            for key in tree_models:
-                display_name = key.split('. ', 1)[1]  # Remove number prefix for display
-                if st.checkbox(display_name, key=f"tree_{key}"):
-                    tree_selected[key] = all_models[key]
-        
-        selected_models = {**linear_selected, **tree_selected}
-        
-        if selected_models:
-            st.info(f"✅ Selected {len(selected_models)} model(s): {', '.join(selected_models.keys())}")
-        else:
-            st.warning("⚠️ Please select at least one model or check 'Run All 10 Models'")
-            return
-    else:
-        selected_models = all_models
-        st.success(f"✅ Running all {len(selected_models)} regression algorithms")    
-    # Train and evaluate
-    if st.button("🚀 Train and Evaluate Selected Models", type="primary", use_container_width=True):
-        st.markdown("---")
-        results = []
-        models_trained = {}
-        
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for idx, (name, model) in enumerate(selected_models.items()):
-            status_text.markdown(f"**Training:** {name} ({idx+1}/{len(selected_models)})...")
-            
-            try:
-                # Train (models are pipelines that handle their own preprocessing)
-                import time
-                start_time = time.time()
-                model.fit(X_train, y_train)
-                train_time = time.time() - start_time
-                
-                # Predict
-                y_pred = model.predict(X_test)
-                
-                # Metrics
-                mse = mean_squared_error(y_test, y_pred)
-                rmse = np.sqrt(mse)
-                mae = mean_absolute_error(y_test, y_pred)
-                r2 = r2_score(y_test, y_pred)
-                
-                results.append({
-                    'Model': name,
-                    'MSE': mse,
-                    'RMSE': rmse,
-                    'MAE': mae,
-                    'R²': r2,
-                    'Train Time (s)': train_time,
-                    'MSE_fmt': f"{mse:.4f}",
-                    'RMSE_fmt': f"{rmse:.4f}",
-                    'MAE_fmt': f"{mae:.4f}",
-                    'R²_fmt': f"{r2:.4f}",
-                    'Time_fmt': f"{train_time:.3f}",
-                })
-                
-                models_trained[name] = {
-                    'model': model,
-                    'predictions': y_pred,
-                    'metrics': results[-1]
-                }
-                
-            except Exception as e:
-                st.error(f"❌ Error training {name}: {e}")
-                import traceback
-                st.code(traceback.format_exc())
-            
-            progress_bar.progress((idx + 1) / len(selected_models))
-        
-        status_text.empty()
-        progress_bar.empty()
-        
-        if not results:
-            st.error("No models were successfully trained.")
-            return
-        
-        st.success(f"✅ Successfully trained {len(results)} model(s)!")
-        
-        # Sort by R² (higher is better)
-        results_sorted = sorted(results, key=lambda x: x['R²'], reverse=True)
-        best_model = results_sorted[0]
-        
-        # Display best model prominently
-        st.markdown("---")
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    padding: 30px; border-radius: 15px; text-align: center; 
-                    box-shadow: 0 10px 25px rgba(0,0,0,0.2); margin: 20px 0;">
-            <h1 style="color: white; margin: 0; font-size: 2.5em;">🏆 BEST MODEL</h1>
-            <h2 style="color: white; margin: 10px 0; font-size: 2em;">{best_model['Model']}</h2>
-            <div style="display: flex; justify-content: space-around; margin-top: 20px; flex-wrap: wrap;">
-                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; min-width: 130px; margin: 5px;">
-                    <div style="color: white; font-size: 0.9em;">R² Score</div>
-                    <div style="color: white; font-size: 1.8em; font-weight: bold;">{best_model['R²_fmt']}</div>
-                </div>
-                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; min-width: 130px; margin: 5px;">
-                    <div style="color: white; font-size: 0.9em;">RMSE</div>
-                    <div style="color: white; font-size: 1.8em; font-weight: bold;">{best_model['RMSE_fmt']}</div>
-                </div>
-                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; min-width: 130px; margin: 5px;">
-                    <div style="color: white; font-size: 0.9em;">MAE</div>
-                    <div style="color: white; font-size: 1.8em; font-weight: bold;">{best_model['MAE_fmt']}</div>
-                </div>
-                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; min-width: 130px; margin: 5px;">
-                    <div style="color: white; font-size: 0.9em;">Train Time</div>
-                    <div style="color: white; font-size: 1.8em; font-weight: bold;">{best_model['Time_fmt']}s</div>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Display results table
-        st.subheader("📊 Complete Performance Comparison")
-        
-        display_df = pd.DataFrame([{
-            '🏅 Rank': idx + 1,
-            'Model': r['Model'],
-            'R² Score': r['R²_fmt'],
-            'MSE': r['MSE_fmt'],
-            'RMSE': r['RMSE_fmt'],
-            'MAE': r['MAE_fmt'],
-            'Train Time': r['Time_fmt']
-        } for idx, r in enumerate(results_sorted)])
-        
-        # Highlight best model
-        def highlight_best(row):
-            if row['🏅 Rank'] == 1:
-                return ['background-color: #e7d4f7; font-weight: bold'] * len(row)
-            return [''] * len(row)
-        
-        styled_df = display_df.style.apply(highlight_best, axis=1)
-        st.dataframe(styled_df, use_container_width=True, height=400)
-        
-        # Performance metrics visualization
-        st.subheader("📈 Performance Metrics Visualization")
-        
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        
-        metrics_to_plot = [
-            ('R²', [r['R²'] for r in results_sorted], '#2ECC71', 'higher is better'),
-            ('RMSE', [r['RMSE'] for r in results_sorted], '#E74C3C', 'lower is better'),
-            ('MAE', [r['MAE'] for r in results_sorted], '#F39C12', 'lower is better'),
-            ('MSE', [r['MSE'] for r in results_sorted], '#E67E22', 'lower is better')
-        ]
-        models = [r['Model'] for r in results_sorted]
-        
-        for idx, (metric, values, color, note) in enumerate(metrics_to_plot):
-            ax = axes[idx // 2, idx % 2]
-            
-            bars = ax.barh(models, values, color=color, alpha=0.8, edgecolor='black', linewidth=1.5)
-            
-            # Highlight best
-            bars[0].set_color('#9B59B6')
-            bars[0].set_edgecolor('gold')
-            bars[0].set_linewidth(3)
-            
-            ax.set_xlabel(metric, fontsize=12, fontweight='bold')
-            ax.set_title(f'{metric} Comparison ({note})', fontsize=14, fontweight='bold')
-            ax.grid(axis='x', alpha=0.3)
-            
-            # Add value labels
-            for bar, value in zip(bars, values):
-                ax.text(value + (max(values) * 0.01), bar.get_y() + bar.get_height()/2, 
-                       f'{value:.3f}', va='center', fontsize=9)
-        
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-        
-        # Predictions vs Actual for top 3 models
-        st.subheader("📊 Predictions vs Actual (Top 3 Models)")
-        
-        top_3 = results_sorted[:min(3, len(results_sorted))]
-        cols = st.columns(3)
-        
-        for idx, result in enumerate(top_3):
-            model_name = result['Model']
-            y_pred = models_trained[model_name]['predictions']
-            
-            with cols[idx]:
-                fig, ax = plt.subplots(figsize=(6, 5))
-                
-                # Choose color based on rank
-                color = '#9B59B6' if idx == 0 else '#3498DB' if idx == 1 else '#E74C3C'
-                
-                ax.scatter(y_test, y_pred, alpha=0.6, edgecolors='k', s=50, color=color)
-                ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 
-                       'r--', lw=3, label='Perfect Prediction')
-                
-                title = f"{'🥇' if idx == 0 else '🥈' if idx == 1 else '🥉'} {model_name}"
-                ax.set_title(title, fontsize=12, fontweight='bold', pad=10)
-                ax.set_xlabel('Actual Values', fontsize=10)
-                ax.set_ylabel('Predicted Values', fontsize=10)
-                ax.grid(alpha=0.3)
-                ax.legend(loc='best')
-                
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close()
-                
-                st.metric("R² Score", result['R²_fmt'], 
-                         delta=None if idx == 0 else f"{result['R²'] - top_3[0]['R²']:.4f}")
-        
-        # Residual plot for best model
-        st.subheader("📉 Residual Analysis (Best Model)")
-        
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-        
-        best_pred = models_trained[best_model['Model']]['predictions']
-        residuals = y_test - best_pred
-        
-        # Residual scatter plot
-        axes[0].scatter(best_pred, residuals, alpha=0.6, edgecolors='k', color='#9B59B6')
-        axes[0].axhline(y=0, color='r', linestyle='--', linewidth=2)
-        axes[0].set_xlabel('Predicted Values', fontsize=12, fontweight='bold')
-        axes[0].set_ylabel('Residuals', fontsize=12, fontweight='bold')
-        axes[0].set_title(f'{best_model["Model"]} - Residual Plot', fontsize=14, fontweight='bold')
-        axes[0].grid(alpha=0.3)
-        
-        # Residual histogram
-        axes[1].hist(residuals, bins=30, color='#9B59B6', alpha=0.7, edgecolor='black')
-        axes[1].axvline(x=0, color='r', linestyle='--', linewidth=2)
-        axes[1].set_xlabel('Residuals', fontsize=12, fontweight='bold')
-        axes[1].set_ylabel('Frequency', fontsize=12, fontweight='bold')
-        axes[1].set_title('Residual Distribution', fontsize=14, fontweight='bold')
-        axes[1].grid(alpha=0.3, axis='y')
-        
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-        
-        # Model insights
-        st.subheader("💡 Key Insights")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown(f"""
-            **Best Overall Model:**
-            - **{best_model['Model']}**
-            - R² Score: {best_model['R²_fmt']}
-            - Training time: {best_model['Time_fmt']}s
-            """)
-        
-        with col2:
-            fastest_model = min(results_sorted, key=lambda x: x['Train Time (s)'])
-            st.markdown(f"""
-            **Fastest Model:**
-            - **{fastest_model['Model']}**
-            - Time: {fastest_model['Time_fmt']}s
-            - R² Score: {fastest_model['R²_fmt']}
-            """)
-        
-        with col3:
-            if len(results_sorted) >= 3:
-                avg_r2 = sum(r['R²'] for r in results_sorted) / len(results_sorted)
-                st.markdown(f"""
-                **Overall Statistics:**
-                - Models trained: {len(results_sorted)}
-                - Average R²: {avg_r2:.4f}
-                - Best-Worst gap: {results_sorted[0]['R²'] - results_sorted[-1]['R²']:.4f}
-                """)
-        
-        # Recommendations
-        st.markdown("---")
-        st.subheader("🎯 Recommendations")
-        
-        if best_model['R²'] >= 0.90:
-            recommendation = "🌟 **Excellent Performance!** Your best model shows outstanding predictive power."
-        elif best_model['R²'] >= 0.75:
-            recommendation = "✅ **Good Performance!** The model explains most of the variance. Consider hyperparameter tuning."
-        elif best_model['R²'] >= 0.50:
-            recommendation = "⚠️ **Moderate Performance.** Consider feature engineering or trying different preprocessing techniques."
-        else:
-            recommendation = "🔴 **Low Performance.** Review your features, target variable, and consider collecting more data."
-        
-        st.info(recommendation)
-        
-        # Hyperparameter tuning suggestion
-        if run_all or len(selected_models) > 1:
-            st.markdown(f"""
-            **Next Steps:**
-            - Fine-tune **{best_model['Model']}** with GridSearchCV or RandomizedSearchCV
-            - Analyze feature importance and correlations
-            - Try polynomial features or interaction terms
-            - Check for outliers and data quality issues
-            """)
-        
-        # NEW: Interactive Features for Regression
-        st.markdown("---")
-        st.subheader("✨ Interactive Features")
-        
-        # Add tabs for different interactive features
-        inter_tab1, inter_tab2, inter_tab3 = st.tabs(["🎯 Make Predictions", "🔍 Explore Data", "📊 Compare Features"])
-        
-        with inter_tab1:
-            if INTERACTIVE_AVAILABLE:
-                st.markdown("#### Predict Golf Scores with Your Own Data")
-                st.markdown("Adjust the sliders below to see predictions in real-time!")
-                interactive_prediction_regression(
-                    models_trained[best_model['Model']]['model'],
-                    X, None, X.columns.tolist()
-                )
-            else:
-                st.warning("Interactive features module not available")
-        
-        with inter_tab2:
-            if INTERACTIVE_AVAILABLE:
-                interactive_data_explorer(working_df, "PGA 2022")
-            else:
-                st.warning("Interactive features module not available")
-        
-        with inter_tab3:
-            if INTERACTIVE_AVAILABLE:
-                interactive_feature_comparison(working_df)
-            else:
-                st.warning("Interactive features module not available")
-
-def show_clustering_review2():
-    """Clustering with K-Means and Hierarchical (Review 2)"""
-    st.header("🔍 Clustering Analysis (Review 2)")
-    
-    st.markdown("""
-    **Review 2 Requirements:**
-    - K-Means clustering with visualization
-    - Hierarchical clustering with dendrogram
-    - Metrics: Silhouette Score, Davies-Bouldin Index, Calinski-Harabasz Index
-    - Dimensionality reduction: PCA and t-SNE
-    """)
-    
-    # Dataset selection
-    dataset = st.radio("Select Dataset", ["WTA Grand Slam Matches (2018-2022)", "Australian Open (Classification)", "PGA 2022 (Regression)"])
-    
-    try:
-        if "WTA Grand Slam" in dataset:
-            # Load WTA Grand Slam dataset
-            df = pd.read_csv('wta-grand-slam-matches-2018to2022.csv')
-            # Select only numerical features for clustering
-            X = df.select_dtypes(include=[np.number]).dropna()
-            y = None  # No labels for this dataset
-            working_df = df
-            st.success(f"✅ Loaded {len(X)} records with {X.shape[1]} features from WTA Grand Slam dataset")
-        elif "Classification" in dataset:
-            # Use classification data loading function
-            X, y, working_df = load_classification_data()
-            if X is None:
-                st.error("Failed to load classification data")
-                return
-            st.success(f"✅ Loaded {len(X)} records with {X.shape[1]} features from Australian Open dataset")
-        else:
-            # Use regression data loading function
-            X, y, working_df = load_regression_data()
-            if X is None:
-                st.error("Failed to load regression data")
-                return
-            st.success(f"✅ Loaded {len(X)} records with {X.shape[1]} features from PGA 2022 dataset")
-        
-        # Scale the data
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-        
-        st.write(f"**Features:** {X.shape[1]} | **Samples:** {X.shape[0]}")
-        
-        with st.expander("📊 Dataset Features"):
-            st.write(f"**Feature columns:** {list(X.columns)}")
-        
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        import traceback
-        st.code(traceback.format_exc())
-        return
-    
-    # Clustering parameters
-    st.subheader("🔧 Clustering Configuration")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        n_clusters = st.slider("Number of Clusters", 2, 10, 3)
-        use_pca = st.checkbox("Use PCA for visualization", value=True)
-    
-    with col2:
-        use_tsne = st.checkbox("Use t-SNE for visualization", value=True)
-        linkage_method = st.selectbox("Hierarchical Linkage", ["ward", "complete", "average", "single"])
-    
-    if st.button("🚀 Run Clustering Analysis", type="primary"):
-        
-        # ===== K-MEANS CLUSTERING =====
-        st.subheader("📊 K-Means Clustering")
-        
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        kmeans_labels = kmeans.fit_predict(X_scaled)
-        
-        # Metrics
-        silhouette_kmeans = silhouette_score(X_scaled, kmeans_labels)
-        davies_bouldin_kmeans = davies_bouldin_score(X_scaled, kmeans_labels)
-        calinski_harabasz_kmeans = calinski_harabasz_score(X_scaled, kmeans_labels)
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Silhouette Score", f"{silhouette_kmeans:.4f}")
-        col2.metric("Davies-Bouldin Index", f"{davies_bouldin_kmeans:.4f}")
-        col3.metric("Calinski-Harabasz Index", f"{calinski_harabasz_kmeans:.2f}")
-        
-        st.info("📌 **Silhouette:** Higher is better | **Davies-Bouldin:** Lower is better | **Calinski-Harabasz:** Higher is better")
-        
-        # Elbow Method
-        st.markdown("**Elbow Method (K-Means):**")
-        inertias = []
-        K_range = range(2, 11)
-        for k in K_range:
-            km = KMeans(n_clusters=k, random_state=42, n_init=10)
-            km.fit(X_scaled)
-            inertias.append(km.inertia_)
-        
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(K_range, inertias, 'bo-', linewidth=2, markersize=8)
-        ax.axvline(x=n_clusters, color='r', linestyle='--', label=f'Selected K={n_clusters}')
-        ax.set_xlabel('Number of Clusters (K)', fontsize=12)
-        ax.set_ylabel('Inertia', fontsize=12)
-        ax.set_title('Elbow Method For Optimal K', fontsize=14, fontweight='bold')
-        ax.legend()
-        ax.grid(alpha=0.3)
-        st.pyplot(fig)
-        plt.close()
-        
-        # Silhouette Analysis
-        st.markdown("**Silhouette Analysis (K-Means):**")
-        silhouette_scores = []
-        for k in K_range:
-            km = KMeans(n_clusters=k, random_state=42, n_init=10)
-            labels = km.fit_predict(X_scaled)
-            score = silhouette_score(X_scaled, labels)
-            silhouette_scores.append(score)
-        
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(K_range, silhouette_scores, 'go-', linewidth=2, markersize=8)
-        ax.axvline(x=n_clusters, color='r', linestyle='--', label=f'Selected K={n_clusters}')
-        ax.set_xlabel('Number of Clusters (K)', fontsize=12)
-        ax.set_ylabel('Silhouette Score', fontsize=12)
-        ax.set_title('Silhouette Score vs Number of Clusters', fontsize=14, fontweight='bold')
-        ax.legend()
-        ax.grid(alpha=0.3)
-        st.pyplot(fig)
-        plt.close()
-        
-        # PCA Visualization
-        if use_pca:
-            st.markdown("**K-Means Clusters (PCA Visualization):**")
-            pca = PCA(n_components=2)
-            X_pca = pca.fit_transform(X_scaled)
-            
-            fig, ax = plt.subplots(figsize=(10, 8))
-            scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], c=kmeans_labels, 
-                                cmap='viridis', alpha=0.6, edgecolors='k', s=50)
-            ax.scatter(pca.transform(kmeans.cluster_centers_)[:, 0],
-                      pca.transform(kmeans.cluster_centers_)[:, 1],
-                      c='red', marker='X', s=300, edgecolors='k', linewidths=2, label='Centroids')
-            ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.2%} variance)', fontsize=12)
-            ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.2%} variance)', fontsize=12)
-            ax.set_title('K-Means Clustering (PCA)', fontsize=14, fontweight='bold')
-            ax.legend()
-            plt.colorbar(scatter, ax=ax, label='Cluster')
-            ax.grid(alpha=0.3)
-            st.pyplot(fig)
-            plt.close()
-        
-        # t-SNE Visualization
-        if use_tsne:
-            st.markdown("**K-Means Clusters (t-SNE Visualization):**")
-            with st.spinner("Computing t-SNE (this may take a moment)..."):
-                tsne = TSNE(n_components=2, random_state=42, perplexity=min(30, X_scaled.shape[0]-1))
-                X_tsne = tsne.fit_transform(X_scaled)
-            
-            fig, ax = plt.subplots(figsize=(10, 8))
-            scatter = ax.scatter(X_tsne[:, 0], X_tsne[:, 1], c=kmeans_labels,
-                                cmap='viridis', alpha=0.6, edgecolors='k', s=50)
-            ax.set_xlabel('t-SNE Component 1', fontsize=12)
-            ax.set_ylabel('t-SNE Component 2', fontsize=12)
-            ax.set_title('K-Means Clustering (t-SNE)', fontsize=14, fontweight='bold')
-            plt.colorbar(scatter, ax=ax, label='Cluster')
-            ax.grid(alpha=0.3)
-            st.pyplot(fig)
-            plt.close()
-        
-        # ===== HIERARCHICAL CLUSTERING =====
-        st.subheader("🌳 Hierarchical Clustering")
-        
-        # Agglomerative Clustering
-        hierarchical = AgglomerativeClustering(n_clusters=n_clusters, linkage=linkage_method)
-        hierarchical_labels = hierarchical.fit_predict(X_scaled)
-        
-        # Metrics
-        silhouette_hier = silhouette_score(X_scaled, hierarchical_labels)
-        davies_bouldin_hier = davies_bouldin_score(X_scaled, hierarchical_labels)
-        calinski_harabasz_hier = calinski_harabasz_score(X_scaled, hierarchical_labels)
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Silhouette Score", f"{silhouette_hier:.4f}")
-        col2.metric("Davies-Bouldin Index", f"{davies_bouldin_hier:.4f}")
-        col3.metric("Calinski-Harabasz Index", f"{calinski_harabasz_hier:.2f}")
-        
-        # Dendrogram
-        st.markdown("**Dendrogram:**")
-        
-        # Sample data for dendrogram if too large
-        sample_size = min(100, X_scaled.shape[0])
-        if X_scaled.shape[0] > sample_size:
-            st.info(f"📌 Showing dendrogram for {sample_size} samples (dataset too large for full dendrogram)")
-            indices = np.random.choice(X_scaled.shape[0], sample_size, replace=False)
-            X_sample = X_scaled[indices]
-        else:
-            X_sample = X_scaled
-        
-        linkage_matrix = linkage(X_sample, method=linkage_method)
-        
-        fig, ax = plt.subplots(figsize=(12, 8))
-        dendrogram(linkage_matrix, ax=ax, truncate_mode='level', p=5)
-        ax.set_xlabel('Sample Index', fontsize=12)
-        ax.set_ylabel('Distance', fontsize=12)
-        ax.set_title(f'Hierarchical Clustering Dendrogram ({linkage_method.capitalize()} Linkage)', 
-                     fontsize=14, fontweight='bold')
-        ax.grid(alpha=0.3)
-        st.pyplot(fig)
-        plt.close()
-        
-        # PCA Visualization
-        if use_pca:
-            st.markdown("**Hierarchical Clusters (PCA Visualization):**")
-            
-            fig, ax = plt.subplots(figsize=(10, 8))
-            scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], c=hierarchical_labels,
-                                cmap='plasma', alpha=0.6, edgecolors='k', s=50)
-            ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.2%} variance)', fontsize=12)
-            ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.2%} variance)', fontsize=12)
-            ax.set_title('Hierarchical Clustering (PCA)', fontsize=14, fontweight='bold')
-            plt.colorbar(scatter, ax=ax, label='Cluster')
-            ax.grid(alpha=0.3)
-            st.pyplot(fig)
-            plt.close()
-        
-        # t-SNE Visualization
-        if use_tsne:
-            st.markdown("**Hierarchical Clusters (t-SNE Visualization):**")
-            
-            fig, ax = plt.subplots(figsize=(10, 8))
-            scatter = ax.scatter(X_tsne[:, 0], X_tsne[:, 1], c=hierarchical_labels,
-                                cmap='plasma', alpha=0.6, edgecolors='k', s=50)
-            ax.set_xlabel('t-SNE Component 1', fontsize=12)
-            ax.set_ylabel('t-SNE Component 2', fontsize=12)
-            ax.set_title('Hierarchical Clustering (t-SNE)', fontsize=14, fontweight='bold')
-            plt.colorbar(scatter, ax=ax, label='Cluster')
-            ax.grid(alpha=0.3)
-            st.pyplot(fig)
-            plt.close()
-        
-        # ===== COMPARISON =====
-        st.subheader("⚖️ K-Means vs Hierarchical Comparison")
-        
-        comparison_df = pd.DataFrame({
-            'Algorithm': ['K-Means', 'Hierarchical'],
-            'Silhouette Score': [f"{silhouette_kmeans:.4f}", f"{silhouette_hier:.4f}"],
-            'Davies-Bouldin Index': [f"{davies_bouldin_kmeans:.4f}", f"{davies_bouldin_hier:.4f}"],
-            'Calinski-Harabasz Index': [f"{calinski_harabasz_kmeans:.2f}", f"{calinski_harabasz_hier:.2f}"]
+@st.cache_resource(show_spinner="Training the 10 classifiers…")
+def train_classifiers():
+    _, X, y = load_tennis()
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y)
+    models, rows, outputs = {}, [], {}
+    for name, model in classifiers().items():
+        model.fit(X_train, y_train)
+        pred = model.predict(X_test)
+        prob = model.predict_proba(X_test)[:, 1]
+        models[name] = model
+        outputs[name] = (pred, prob)
+        rows.append({
+            "Model": name,
+            "Accuracy": accuracy_score(y_test, pred),
+            "Precision": precision_score(y_test, pred, average="weighted", zero_division=0),
+            "Recall": recall_score(y_test, pred, average="weighted", zero_division=0),
+            "F1 (weighted)": f1_score(y_test, pred, average="weighted"),
+            "ROC-AUC": roc_auc_score(y_test, prob),
         })
-        
-        st.dataframe(comparison_df, use_container_width=True)
-        
-        # Determine better algorithm
-        kmeans_score = silhouette_kmeans - davies_bouldin_kmeans/10 + calinski_harabasz_kmeans/1000
-        hier_score = silhouette_hier - davies_bouldin_hier/10 + calinski_harabasz_hier/1000
-        
-        if kmeans_score > hier_score:
-            st.success("🏆 **K-Means performs better** based on combined metrics")
-        else:
-            st.success("🏆 **Hierarchical Clustering performs better** based on combined metrics")
-        
-        # NEW: Interactive Clustering Features
-        st.markdown("---")
-        st.subheader("✨ Interactive Cluster Explorer")
-        
-        if INTERACTIVE_AVAILABLE:
-            selected_cluster, show_only = interactive_clustering_explorer(
-                X_scaled, kmeans_labels, n_clusters
-            )
-            
-            # Show filtered visualization if requested
-            if show_only and use_pca:
-                st.markdown(f"#### Cluster {selected_cluster} Highlighted (PCA)")
-                fig, ax = plt.subplots(figsize=(10, 8))
-                
-                # Plot all points in gray
-                ax.scatter(X_pca[:, 0], X_pca[:, 1], c='lightgray', 
-                          alpha=0.3, edgecolors='none', s=30, label='Other Clusters')
-                
-                # Highlight selected cluster
-                cluster_mask = kmeans_labels == selected_cluster
-                ax.scatter(X_pca[cluster_mask, 0], X_pca[cluster_mask, 1], 
-                          c='#667eea', alpha=0.8, edgecolors='k', s=100, 
-                          label=f'Cluster {selected_cluster}')
-                
-                # Show centroid
-                centroid_pca = pca.transform(kmeans.cluster_centers_[selected_cluster].reshape(1, -1))
-                ax.scatter(centroid_pca[:, 0], centroid_pca[:, 1],
-                          c='red', marker='X', s=400, edgecolors='k', 
-                          linewidths=3, label='Centroid', zorder=5)
-                
-                ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.2%} variance)', fontsize=12)
-                ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.2%} variance)', fontsize=12)
-                ax.set_title(f'Cluster {selected_cluster} Analysis', fontsize=14, fontweight='bold')
-                ax.legend()
-                ax.grid(alpha=0.3)
-                st.pyplot(fig)
-                plt.close()
-        else:
-            st.warning("Interactive features module not available")
+    table = pd.DataFrame(rows).sort_values("F1 (weighted)", ascending=False).set_index("Model")
+    return models, table, outputs, y_test
 
-if __name__ == "__main__":
-    main()
+
+def classification_page():
+    st.header("Classification: will the favourite win?")
+    st.caption("Australian Open men's singles, 2008–2022. Target: did the higher-ranked player win? "
+               "All features are symmetric in the two players, so the result of the match never leaks in.")
+
+    df, X, _ = load_tennis()
+    models, table, outputs, y_test = train_classifiers()
+
+    predict_tab, compare_tab, data_tab = st.tabs(["Predict", "Model comparison", "Data"])
+
+    with predict_tab:
+        left, right = st.columns(2)
+        with left:
+            st.subheader("Player A")
+            rank_a = st.number_input("ATP ranking", 1, 2000, 8, key="rank_a")
+            pro_a = st.number_input("Year turned pro", 1990, 2025, 2012, key="pro_a")
+            height_a = st.number_input("Height (cm)", 160, 215, 188, key="height_a")
+            weight_a = st.number_input("Weight (kg)", 55, 120, 82, key="weight_a")
+            hand_a = st.radio("Plays", ["Right", "Left"], horizontal=True, key="hand_a")
+        with right:
+            st.subheader("Player B")
+            rank_b = st.number_input("ATP ranking", 1, 2000, 64, key="rank_b")
+            pro_b = st.number_input("Year turned pro", 1990, 2025, 2016, key="pro_b")
+            height_b = st.number_input("Height (cm)", 160, 215, 185, key="height_b")
+            weight_b = st.number_input("Weight (kg)", 55, 120, 80, key="weight_b")
+            hand_b = st.radio("Plays", ["Right", "Left"], horizontal=True, key="hand_b")
+
+        names = list(models)
+        model_name = st.selectbox("Model", names, index=names.index(CLS_FINAL_MODEL),
+                                  help="Gaussian Naive Bayes is the final model chosen in the notebook.")
+
+        features = match_features(rank_a, rank_b, pro_a, pro_b, height_a, height_b,
+                                  weight_a, weight_b, hand_a == hand_b)
+        p_fav = models[model_name].predict_proba(pd.DataFrame([features])[CLS_FEATURES])[0, 1]
+
+        if rank_a == rank_b:
+            st.info("Both players have the same ranking, so there is no favourite. "
+                    "The model treats Player A as the favourite.")
+        favourite, fav_rank = ("Player A", rank_a) if rank_a <= rank_b else ("Player B", rank_b)
+        underdog = "Player B" if favourite == "Player A" else "Player A"
+        winner = favourite if p_fav >= 0.5 else underdog
+
+        st.divider()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Favourite", f"{favourite} (#{fav_rank})")
+        c2.metric("P(favourite wins)", "> 99.9%" if p_fav > 0.999 else f"{p_fav:.1%}")
+        c3.metric("Predicted winner", winner)
+        st.caption(f"Base rate in the data: the favourite wins {y_test.mean():.0%} of matches.")
+
+        with st.expander("Features passed to the model"):
+            st.dataframe(pd.DataFrame([features]).T.rename(columns={0: "value"}), width="stretch")
+
+    with compare_tab:
+        st.subheader("Test-set results (380 matches, stratified 80/20 split)")
+        st.dataframe(table.style.format("{:.4f}").highlight_max(color="#d9ead3"), width="stretch")
+
+        chosen = st.selectbox("Inspect a model", table.index, key="cls_inspect")
+        pred, prob = outputs[chosen]
+        c1, c2 = st.columns(2)
+        with c1:
+            fig, ax = plt.subplots(figsize=(4, 3.4))
+            cm = confusion_matrix(y_test, pred)
+            ax.imshow(cm, cmap="Blues")
+            for (i, j), v in np.ndenumerate(cm):
+                ax.text(j, i, v, ha="center", va="center", color="white" if v > cm.max() / 2 else "black")
+            ax.set_xticks([0, 1], ["Upset", "Fav. won"])
+            ax.set_yticks([0, 1], ["Upset", "Fav. won"])
+            ax.set_xlabel("Predicted")
+            ax.set_ylabel("Actual")
+            ax.set_title(f"Confusion matrix: {chosen}")
+            ax.grid(False)
+            st.pyplot(fig)
+        with c2:
+            fig, ax = plt.subplots(figsize=(4, 3.4))
+            fpr, tpr, _ = roc_curve(y_test, prob)
+            ax.plot(fpr, tpr, color=PALETTE[0], label=f"AUC = {table.loc[chosen, 'ROC-AUC']:.3f}")
+            ax.plot([0, 1], [0, 1], "--", color="grey", label="Random")
+            ax.set_xlabel("False positive rate")
+            ax.set_ylabel("True positive rate")
+            ax.set_title(f"ROC curve: {chosen}")
+            ax.legend(loc="lower right")
+            st.pyplot(fig)
+
+    with data_tab:
+        st.write(f"{len(df):,} matches with a known result.")
+        st.dataframe(df.head(200), width="stretch")
+
+
+# ---------------------------------------------------------------- regression
+
+REG_INPUTS = {
+    "avgDriveDist": ("Average driving distance (yards)", 1.0),
+    "drivePct": ("Driving accuracy (% fairways hit)", 0.5),
+    "driveSG": ("Strokes gained: off the tee", 0.05),
+    "avgPuttsPerRound": ("Putts per round", 0.25),
+    "onePuttPct": ("One-putt percentage", 0.5),
+    "puttsSG": ("Strokes gained: putting", 0.05),
+}
+REG_FEATURES = list(REG_INPUTS) + ["totalSG"]
+
+
+@st.cache_data
+def load_golf():
+    df = pd.read_csv("PGA2022.csv", encoding="latin1").dropna(subset=["avgScore"])
+    df["totalSG"] = df["driveSG"] + df["puttsSG"]
+    return df
+
+
+def regressors():
+    # Hyperparameters are the GridSearchCV results from regression.ipynb.
+    f = REG_FEATURES
+    return {
+        "Linear Regression": pipe(f, LinearRegression()),
+        "Ridge Regression": pipe(f, Ridge(alpha=10)),
+        "Lasso Regression": pipe(f, Lasso(alpha=0.01, max_iter=20000)),
+        "ElasticNet Regression": pipe(f, ElasticNet(alpha=0.01, l1_ratio=0.8, max_iter=20000)),
+        "Polynomial Regression": pipe(f, LinearRegression(), poly_degree=2),
+        "Decision Tree": pipe(f, DecisionTreeRegressor(max_depth=5, random_state=RANDOM_STATE), scale=False),
+        "Random Forest": pipe(f, RandomForestRegressor(n_estimators=100, max_depth=5, random_state=RANDOM_STATE,
+                                                       n_jobs=-1), scale=False),
+        "Gradient Boosting": pipe(f, GradientBoostingRegressor(n_estimators=100, learning_rate=0.05, max_depth=2,
+                                                               random_state=RANDOM_STATE), scale=False),
+        "Support Vector Regressor": pipe(f, SVR(C=0.1, kernel="linear")),
+        "KNN Regressor": pipe(f, KNeighborsRegressor(n_neighbors=21)),
+    }
+
+
+@st.cache_resource(show_spinner="Training the 10 regressors…")
+def train_regressors():
+    df = load_golf()
+    X, y = df[REG_FEATURES], df["avgScore"]
+    bins = pd.qcut(y, q=10, labels=False, duplicates="drop")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=bins)
+    models, rows, preds = {}, [], {}
+    for name, model in regressors().items():
+        model.fit(X_train, y_train)
+        pred = model.predict(X_test)
+        models[name], preds[name] = model, pred
+        rows.append({"Model": name, "R²": r2_score(y_test, pred),
+                     "RMSE": np.sqrt(mean_squared_error(y_test, pred)),
+                     "MAE": mean_absolute_error(y_test, pred)})
+    table = pd.DataFrame(rows).sort_values("R²", ascending=False).set_index("Model")
+    return models, table, preds, y_test
+
+
+def regression_page():
+    st.header("Regression: predict a golfer's scoring average")
+    st.caption("PGA Tour 2022, one row per golfer per tournament. Target: average strokes per round (avgScore).")
+
+    df = load_golf()
+    models, table, preds, y_test = train_regressors()
+
+    predict_tab, compare_tab, data_tab = st.tabs(["Predict", "Model comparison", "Data"])
+
+    with predict_tab:
+        values = {}
+        cols = st.columns(3)
+        for i, (feature, (label, step)) in enumerate(REG_INPUTS.items()):
+            col = df[feature]
+            values[feature] = cols[i % 3].number_input(
+                label, float(col.min()), float(col.max()), float(round(col.median(), 2)), step=step,
+                key=f"reg_{feature}")
+        values["totalSG"] = values["driveSG"] + values["puttsSG"]
+
+        names = list(table.index)
+        model_name = st.selectbox("Model", names, index=0, help="Sorted by test-set R²; the first one is the best.")
+        score = models[model_name].predict(pd.DataFrame([values])[REG_FEATURES])[0]
+
+        st.divider()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Predicted scoring average", f"{score:.2f}")
+        c2.metric("Field median", f"{df['avgScore'].median():.2f}",
+                  delta=f"{score - df['avgScore'].median():+.2f} strokes", delta_color="inverse")
+        c3.metric("Strokes gained, total", f"{values['totalSG']:+.2f}")
+        st.caption(f"Typical error of this model on unseen golfers (MAE): ±{table.loc[model_name, 'MAE']:.2f} strokes.")
+
+    with compare_tab:
+        st.subheader("Test-set results (stratified 80/20 split)")
+        st.dataframe(table.style.format("{:.4f}"), width="stretch")
+
+        chosen = st.selectbox("Inspect a model", table.index, key="reg_inspect")
+        pred = preds[chosen]
+        c1, c2 = st.columns(2)
+        with c1:
+            fig, ax = plt.subplots(figsize=(4, 3.4))
+            ax.scatter(y_test, pred, s=10, alpha=0.6, color=PALETTE[0])
+            lims = [min(y_test.min(), pred.min()), max(y_test.max(), pred.max())]
+            ax.plot(lims, lims, "--", color="grey", label="Perfect prediction")
+            ax.set_xlabel("Actual avgScore")
+            ax.set_ylabel("Predicted avgScore")
+            ax.set_title(f"Predicted vs actual: {chosen}")
+            ax.legend()
+            st.pyplot(fig)
+        with c2:
+            fig, ax = plt.subplots(figsize=(4, 3.4))
+            ax.scatter(pred, y_test - pred, s=10, alpha=0.6, color=PALETTE[1])
+            ax.axhline(0, color="grey", linestyle="--")
+            ax.set_xlabel("Predicted avgScore")
+            ax.set_ylabel("Residual (actual − predicted)")
+            ax.set_title(f"Residuals: {chosen}")
+            st.pyplot(fig)
+
+    with data_tab:
+        st.write(f"{len(df):,} golfer-tournament rows.")
+        st.dataframe(df.head(200), width="stretch")
+
+
+# ---------------------------------------------------------------- clustering
+
+CLU_FEATURES = ["total_points", "winner_point_share", "winner_serve_won_pct", "loser_serve_won_pct",
+                "ace_rate", "df_rate", "bp_per_game"]
+CLU_K = 4
+
+
+@st.cache_data
+def load_wta():
+    # Same cleaning and features as clustering.ipynb, section 2.
+    df = pd.read_csv("wta-grand-slam-matches-2018to2022.csv")
+    m = df[~df["score"].str.contains("RET|W/O|DEF", na=False)]
+    m = m.dropna(subset=["w_svpt", "l_svpt", "w_SvGms", "l_SvGms"])
+    m = m[(m["w_svpt"] > 0) & (m["l_svpt"] > 0)].copy()
+
+    total = m["w_svpt"] + m["l_svpt"]
+    w_won = m["w_1stWon"] + m["w_2ndWon"]
+    l_won = m["l_1stWon"] + m["l_2ndWon"]
+    feats = pd.DataFrame({
+        "total_points": total,
+        "winner_point_share": (w_won + (m["l_svpt"] - l_won)) / total,
+        "winner_serve_won_pct": w_won / m["w_svpt"],
+        "loser_serve_won_pct": l_won / m["l_svpt"],
+        "ace_rate": (m["w_ace"] + m["l_ace"]) / total,
+        "df_rate": (m["w_df"] + m["l_df"]) / total,
+        "bp_per_game": (m["w_bpFaced"] + m["l_bpFaced"]) / (m["w_SvGms"] + m["l_SvGms"]),
+    }, index=m.index).replace([np.inf, -np.inf], np.nan)
+    feats = feats.fillna(feats.median())
+    return m, feats
+
+
+@st.cache_resource(show_spinner="Fitting the clustering models…")
+def fit_clustering():
+    matches, feats = load_wta()
+    lower, upper = feats.quantile(0.01), feats.quantile(0.99)
+    scaler = StandardScaler().fit(feats.clip(lower, upper, axis=1))
+    X = scaler.transform(feats.clip(lower, upper, axis=1))
+
+    kmeans = KMeans(n_clusters=CLU_K, n_init=10, random_state=RANDOM_STATE).fit(X)
+    ward = AgglomerativeClustering(n_clusters=CLU_K, linkage="ward").fit_predict(X)
+    pca = PCA(n_components=2, random_state=RANDOM_STATE).fit(X)
+
+    # Name clusters from their profile rather than their (arbitrary) label number.
+    profile = feats.assign(cluster=kmeans.labels_).groupby("cluster").mean()
+    shortest, longest = profile["total_points"].idxmin(), profile["total_points"].idxmax()
+    rest = profile.drop([shortest, longest])
+    serve = rest["ace_rate"].idxmax()
+    names = {shortest: "One-sided rout", longest: "Long, close battle", serve: "Serve-dominated",
+             rest.drop(serve).index[0]: "Break-heavy"}
+
+    def scores(labels):
+        return {"Silhouette": silhouette_score(X, labels), "Davies-Bouldin": davies_bouldin_score(X, labels),
+                "Calinski-Harabasz": calinski_harabasz_score(X, labels)}
+
+    metrics = pd.DataFrame({"K-Means": scores(kmeans.labels_), "Agglomerative (Ward)": scores(ward)}).T
+    return dict(X=X, lower=lower, upper=upper, scaler=scaler, kmeans=kmeans, ward=ward, pca=pca,
+                names=names, profile=profile, metrics=metrics, surface=matches["surface"].values)
+
+
+@st.cache_data(show_spinner="Running K-Means for k = 2…10…")
+def elbow_curve():
+    X = fit_clustering()["X"]
+    rows = []
+    for k in range(2, 11):
+        km = KMeans(n_clusters=k, n_init=10, random_state=RANDOM_STATE).fit(X)
+        rows.append({"k": k, "Inertia": km.inertia_, "Silhouette": silhouette_score(X, km.labels_)})
+    return pd.DataFrame(rows).set_index("k")
+
+
+def clustering_page():
+    st.header("Clustering: what kinds of matches are there?")
+    st.caption("WTA Grand Slam matches, 2018–2022. Matches are grouped by how they were played "
+               "(length, one-sidedness, serve and break-point rates). Surface is not used for fitting.")
+
+    _, feats = load_wta()
+    c = fit_clustering()
+
+    predict_tab, compare_tab, explore_tab = st.tabs(["Assign a match", "Model comparison", "Elbow & dendrogram"])
+
+    with predict_tab:
+        st.write("Enter a match's statistics to see which K-Means cluster it belongs to.")
+        cols = st.columns(4)
+        total_points = cols[0].number_input("Total points played", 40, 320, 140, step=5)
+        winner_share = cols[1].number_input("Winner's share of all points (%)", 40.0, 85.0, 56.0, step=0.5)
+        w_serve = cols[2].number_input("Winner's serve points won (%)", 35.0, 95.0, 64.0, step=0.5)
+        l_serve = cols[3].number_input("Loser's serve points won (%)", 20.0, 75.0, 51.0, step=0.5)
+        cols = st.columns(4)
+        aces = cols[0].number_input("Aces per 100 points", 0.0, 20.0, 4.0, step=0.5)
+        dfs = cols[1].number_input("Double faults per 100 points", 0.0, 16.0, 5.0, step=0.5)
+        bps = cols[2].number_input("Break points faced per service game", 0.0, 3.0, 0.75, step=0.05)
+
+        new = pd.DataFrame([{
+            "total_points": total_points, "winner_point_share": winner_share / 100,
+            "winner_serve_won_pct": w_serve / 100, "loser_serve_won_pct": l_serve / 100,
+            "ace_rate": aces / 100, "df_rate": dfs / 100, "bp_per_game": bps,
+        }])[CLU_FEATURES]
+        z = c["scaler"].transform(new.clip(c["lower"], c["upper"], axis=1))
+        cluster = int(c["kmeans"].predict(z)[0])
+        distances = np.linalg.norm(c["kmeans"].cluster_centers_ - z, axis=1)
+
+        st.divider()
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Cluster", f"{cluster}: {c['names'][cluster]}")
+        m2.metric("Distance to its centre", f"{distances[cluster]:.2f}")
+        runner_up = int(np.argsort(distances)[1])
+        m3.metric("Next closest", f"{runner_up}: {c['names'][runner_up]}")
+
+        left, right = st.columns([3, 2])
+        with left:
+            pca, labels = c["pca"], c["kmeans"].labels_
+            coords, point = pca.transform(c["X"]), pca.transform(z)
+            fig, ax = plt.subplots(figsize=(6, 4.2))
+            for k in range(CLU_K):
+                mask = labels == k
+                ax.scatter(coords[mask, 0], coords[mask, 1], s=6, alpha=0.35, color=PALETTE[k],
+                           label=f"{k}: {c['names'][k]}")
+            ax.scatter(point[:, 0], point[:, 1], marker="*", s=320, color="black", label="Your match")
+            ax.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]:.0%} variance)")
+            ax.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]:.0%} variance)")
+            ax.set_title("Your match among all matches (PCA)")
+            ax.legend(fontsize=7, loc="best")
+            st.pyplot(fig)
+        with right:
+            st.write("Average match in each cluster")
+            profile = c["profile"].copy()
+            profile.index = [f"{k}: {c['names'][k]}" for k in profile.index]
+            st.dataframe(profile.T.style.format("{:.3f}"), width="stretch")
+
+    with compare_tab:
+        st.subheader(f"Internal metrics, k = {CLU_K}")
+        st.dataframe(c["metrics"].style.format("{:.4f}"), width="stretch")
+        st.caption("Silhouette: higher is better. Davies-Bouldin: lower is better. "
+                   "Calinski-Harabasz: higher is better.")
+
+        algo = st.radio("Colour points by", ["K-Means", "Agglomerative (Ward)"], horizontal=True)
+        labels = c["kmeans"].labels_ if algo == "K-Means" else c["ward"]
+        coords = c["pca"].transform(c["X"])
+        fig, ax = plt.subplots(figsize=(7, 4.4))
+        for k in np.unique(labels):
+            mask = labels == k
+            ax.scatter(coords[mask, 0], coords[mask, 1], s=6, alpha=0.5, color=PALETTE[k],
+                       label=f"Cluster {k} (n={mask.sum()})")
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+        ax.set_title(f"{algo}: PCA projection")
+        ax.legend(fontsize=7)
+        st.pyplot(fig)
+
+        surface = pd.crosstab(pd.Series(c["kmeans"].labels_, name="Cluster").map(
+            lambda k: f"{k}: {c['names'][k]}"), pd.Series(c["surface"], name="Surface"), normalize="columns")
+        st.write("Share of each surface's matches per K-Means cluster (surface was only used after fitting):")
+        st.dataframe(surface.style.format("{:.0%}"), width="stretch")
+
+    with explore_tab:
+        elbow = elbow_curve()
+        c1, c2 = st.columns(2)
+        with c1:
+            fig, ax = plt.subplots(figsize=(4.5, 3.2))
+            ax.plot(elbow.index, elbow["Inertia"], marker="o", color=PALETTE[0])
+            ax.axvline(CLU_K, color="grey", linestyle="--", label=f"Chosen k = {CLU_K}")
+            ax.set_xlabel("k")
+            ax.set_ylabel("Inertia")
+            ax.set_title("Elbow curve")
+            ax.legend()
+            st.pyplot(fig)
+        with c2:
+            fig, ax = plt.subplots(figsize=(4.5, 3.2))
+            ax.plot(elbow.index, elbow["Silhouette"], marker="o", color=PALETTE[2])
+            ax.axvline(CLU_K, color="grey", linestyle="--", label=f"Chosen k = {CLU_K}")
+            ax.set_xlabel("k")
+            ax.set_ylabel("Silhouette score")
+            ax.set_title("Silhouette vs k")
+            ax.legend()
+            st.pyplot(fig)
+
+        method = st.selectbox("Dendrogram linkage", ["ward", "complete", "average", "single"])
+        Z = linkage(c["X"], method=method)
+        fig, ax = plt.subplots(figsize=(9, 3.6))
+        dendrogram(Z, truncate_mode="lastp", p=30, ax=ax, leaf_rotation=90, color_threshold=Z[-(CLU_K - 1), 2])
+        ax.set_xlabel("Cluster (number of matches)")
+        ax.set_ylabel("Merge distance")
+        ax.set_title(f"Dendrogram, {method} linkage (last 30 merges)")
+        ax.grid(False)
+        st.pyplot(fig)
+
+
+# ---------------------------------------------------------------- about
+
+def about_page():
+    st.header("About")
+    st.markdown(
+        """
+23CSE301 Machine Learning capstone, Team 16 (TASKMASTERS).
+
+| Track | Dataset | Task | Final model |
+|---|---|---|---|
+| Regression | PGA Tour 2022 | Predict scoring average | Support Vector Regressor (linear) |
+| Classification | Australian Open 2008–2022 | Did the higher-ranked player win? | Gaussian Naive Bayes |
+| Clustering | WTA Grand Slams 2018–2022 | Group matches by playing pattern | K-Means, k = 4 |
+
+The full analysis, including EDA, tuning and every required plot, is in the three notebooks.
+This app retrains the same models with the hyperparameters the notebooks selected,
+so the numbers here match the notebooks.
+"""
+    )
+
+
+PAGES = {
+    "Classification": classification_page,
+    "Regression": regression_page,
+    "Clustering": clustering_page,
+    "About": about_page,
+}
+
+st.sidebar.title("ML Capstone")
+st.sidebar.caption("23CSE301 · Team 16")
+page = st.sidebar.radio("Track", list(PAGES), label_visibility="collapsed")
+PAGES[page]()
