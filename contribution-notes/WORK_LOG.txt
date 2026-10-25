@@ -1,0 +1,14 @@
+Machine Learning Capstone - Work Log
+
+Project Overview:
+Documentation for the machine learning capstone project.
+
+Development Notes:
+This file records project observations, development progress,
+experiments, testing, and future improvements.
+
+Future Tasks:
+1. Review the project objectives.
+2. Document the dataset and preprocessing.
+3. Record model experiments and evaluation results.
+4. Document testing and improvements.
